@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse
+import json
 from functools import lru_cache
 from pathlib import Path
 import numpy as np
@@ -658,7 +659,7 @@ app.layout=html.Div([
     html.Details([html.Summary('모형과 그래프 읽는 법'),dcc.Markdown(r'수업 표기: 일반 파동함수는 $\Psi(x,t)$, 에너지 고유함수는 $\psi_n(x)$입니다. 따라서 $\Psi(x,t)=\sum_n c_n\psi_n(x)e^{-iE_nt/\hbar}$로 씁니다. $A_0$는 그래프의 초기 진폭 기준이며 고유함수 $\psi_0$와 구분합니다. 푸리에 변환 1~3단계의 기저는 무한우물의 $\psi_n$입니다.',mathjax=True),html.P('무한 퍼텐셜 우물, 조화진동자, 자유입자는 1차원 비상대론적 양자역학 모형입니다. 푸리에 변환 실험은 직교성·성분 추출·재구성을 물리계 사이에 연결합니다. Ψ는 복소 파동함수, |Ψ|²는 위치 확률밀도이며, Δx와 Δk는 확률분포의 표준편차입니다. 불확정성은 측정 기기의 부정확성을 뜻하지 않습니다.'),html.P('자유입자 아래의 벽 반사는 반직선 영역의 벽 하나를 다룹니다. 무한 퍼텐셜 우물은 양쪽 벽 사이의 별도 모형입니다. 모든 파수에서 반사 확률이 1이며 벽에서 Ψ=0입니다. 색은 복소 파동함수의 위상이며 확률을 나타내지 않습니다.')]),
     html.Details([html.Summary('수업에 활용하는 순서'),html.P('무한 퍼텐셜 우물에서 경계조건과 에너지 양자화를 탐구하고, 조화진동자의 에너지 고유상태와 중첩을 비교합니다. 자유입자에서는 평면파 → 중첩 → 푸리에 변환 → 파동묶음의 운동 → 벽 반사 순으로 탐구합니다. 푸리에 변환의 1~3단계는 무한우물의 사인 기저를 이용하고 4단계에서 자유입자의 연속 평면파 기저로 확장합니다.')]),
     html.Footer(['AI 기반 물리 시뮬레이션 교육 · 전남대학교 물리교육과 · 개발: 황정운',html.Br(),'실행 환경: Python · Dash · uv']),
-    dcc.Interval(id='clock',interval=80,disabled=True),dcc.Store(id='time-limit',data={'end':10}),dcc.Download(id='download')],className='page')
+    dcc.Interval(id='clock',interval=80,disabled=True),dcc.Store(id='render-busy',data=False),dcc.Store(id='time-limit',data={'end':10}),dcc.Download(id='download')],className='page')
 
 
 SYSTEM_EXPERIMENTS={
@@ -735,7 +736,7 @@ def configure_time_limit(mode,k0,mass,sk,harmonic_state,well_state=None):
 # Keep the clock and reset in one synchronous browser callback. A delayed network
 # tick can no longer overwrite a user's initial-condition reset or pause.
 app.clientside_callback(
-    """function(n, restart, mode, k0, mass, sk, ho, play, limit, t, speed, disabled) {
+    """function(n, restart, mode, k0, mass, sk, ho, play, limit, t, speed, disabled, busy) {
         const ctx = dash_clientside.callback_context;
         const changed = new Set((ctx.triggered || []).map(v => v.prop_id.split('.')[0]));
         const end = mode === 'oscillator' ? 4*Math.PI :
@@ -759,6 +760,8 @@ app.clientside_callback(
             return [dash_clientside.no_update, end, stopped, label(stopped)];
         }
         if (!disabled && valid && changed.has('clock')) {
+            // Wait for the previous server frame instead of building a queue.
+            if (busy) return Array(4).fill(dash_clientside.no_update);
             const next = Math.min(end, Number(t || 0)+(mode === 'well' ? .01 : .08)*Number(speed || 1));
             return [next, end, next>=end, label(next>=end)];
         }
@@ -766,7 +769,7 @@ app.clientside_callback(
     }""",
     Output('time','value'),Output('time','max'),Output('clock','disabled'),Output('play','children'),
     Input('clock','n_intervals'),Input('restart','n_clicks'),Input('mode','value'),Input('k0','value'),Input('mass','value'),Input('sigma-k','value'),
-    Input('ho-state','data'),Input('play','n_clicks'),Input('time-limit','data'),State('time','value'),State('speed','value'),State('clock','disabled'))
+    Input('ho-state','data'),Input('play','n_clicks'),Input('time-limit','data'),State('time','value'),State('speed','value'),State('clock','disabled'),State('render-busy','data'))
 
 
 @app.callback(Output('count','value'),Output('sigma-k','value'),Input('few','n_clicks'),Input('packet','n_clicks'),Input('narrow','n_clicks'),prevent_initial_call=True)
@@ -871,6 +874,8 @@ def configure_fourier_stage(stage):
 @app.callback(Output('component-plot','figure'),Output('component-title','children'),Output('component-note','children'),Output('component-panel','style'),Output('component-plot','style'),
               Input('mode','value'),Input('k0','value'),Input('sigma-k','value'),Input('count','value'),Input('pulse-width','value'),Input('time','value'),Input('mass','value'),Input('ft-state','data'))
 def render_components(mode,k0,sk,count,sigma,t,mass,fourier_state=None):
+    if mode!='wall' and set(ctx.triggered_prop_ids)=={'time.value'}:
+        return (no_update,)*5
     changed={prop.split('.')[0] for prop in ctx.triggered_prop_ids}
     if changed & {'mode','k0','sigma-k','mass'}:t=0
     if mode=='fourier':
@@ -903,9 +908,26 @@ def render_components(mode,k0,sk,count,sigma,t,mass,fourier_state=None):
     return fig,title,note,{} if height else {'display':'none'},{'--component-height':f'{height}px','height':f'{height}px','minHeight':f'{height}px','width':'100%'}
 
 
+def playback_position_patch(figure,move_grid=False):
+    """Send changing samples and axes without resending styles or static text."""
+    patch=Patch()
+    # Preserve Plotly's compact binary array encoding in partial updates too.
+    encoded=json.loads(figure.to_json())
+    for i,trace in enumerate(encoded['data']):
+        patch['data'][i]['y']=trace.get('y')
+        if move_grid:patch['data'][i]['x']=trace.get('x')
+        if 'customdata' in trace:patch['data'][i]['customdata']=trace['customdata']
+        if 'color' in trace.get('marker',{}):patch['data'][i]['marker']['color']=trace['marker']['color']
+    for key in ('shapes','annotations'):
+        patch['layout'][key]=[item.to_plotly_json() for item in getattr(figure.layout,key)]
+    for key in ('xaxis','yaxis'):
+        patch['layout'][key]['range']=getattr(figure.layout,key).range
+    return patch
+
+
 PARAMS=[Input('mode','value'),Input('k0','value'),Input('sigma-k','value'),Input('count','value'),Input('mass','value'),Input('pulse-width','value'),Input('time','value'),Input('options','value'),Input('ho-state','data')]
 @app.callback(Output('position','figure'),Output('spectrum','figure'),Output('metrics','children'),Output('concept','children'),Output('questions','children'),Output('status','children'),Output('position-note','children'),Output('spectrum-note','children'),Output('position-title','children'),Output('spectrum-title','children'),Output('lesson-title','children'),Output('lesson-desc','children'),Output('unit-label','children'),
-              Output('k0-value','children'),Output('sigma-k-value','children'),Output('count-value','children'),Output('mass-value','children'),Output('pulse-width-value','children'),Output('time-value','children'),*PARAMS,Input('axis-mode','value'),Input('y-zoom','value'),Input('ft-state','data'),Input('well-state','data'))
+              Output('k0-value','children'),Output('sigma-k-value','children'),Output('count-value','children'),Output('mass-value','children'),Output('pulse-width-value','children'),Output('time-value','children'),*PARAMS,Input('axis-mode','value'),Input('y-zoom','value'),Input('ft-state','data'),Input('well-state','data'),running=[(Output('render-busy','data'),True,False)])
 def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,fourier_state=None,well_state=None):
     changed={prop.split('.')[0] for prop in ctx.triggered_prop_ids}
     if changed & {'mode','k0','sigma-k','mass','ho-state','well-state'}:
@@ -923,6 +945,9 @@ def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,four
         return (mirror_position_patch(k0,sigma,t,opts,axis_mode,zoom),)+(no_update,)*17+(f'{t:.2f}',)
     t=0 if mode=='build' else t
     result=figures(mode,k0,sk,count,mass,sigma,t,opts,axis_mode,zoom,harmonic_state,fourier_state,well_state)
+    if mode in ('plane','free','well') and set(ctx.triggered_prop_ids)=={'time.value'}:
+        position=playback_position_patch(result[0],move_grid=mode=='free' and 'follow' in (opts or []))
+        return (position,no_update,result[2])+(no_update,)*15+(f'{t:.2f}',)
     info=MODE_INFO[mode]
     unit='전자기파 · c=1, E₀=1 · x₀=−18' if mode=='mirror' else '양자 모형 · 무차원 단위 · ℏ=1 · x₀=0'
     if mode=='plane':unit='평면파 · 길이 단위 L₀ · 질량 단위 M₀ · 시간 단위 T₀ · ℏ=1'
