@@ -11,6 +11,7 @@ from teaching_content import question_items,math_block
 import harmonic_ui as ho
 import fourier_ui as ft
 import well_ui as well
+import browser_playback as playback
 from physics import gaussian_packet, gaussian_width, k_density, progressive_superposition, mirror_fields, mirror_envelopes, mirror_component, wall_packet, wall_plane_mode
 
 CYAN, PINK, YELLOW, BLUE, GREEN = '#48d7ff', '#ff7daf', '#ffd166', '#76a9ff', '#74e0aa'
@@ -137,10 +138,13 @@ def wall_frame_patches(k0,sk,mass,t,options,axis_mode,zoom):
     frame=wall_frame(k0,sk,mass,t)
     position=Patch();spectral=Patch()
     values=wall_values(frame,options)
-    for i,y in enumerate(values):position['data'][i]['y']=y.tolist()
+    stride=max(1,int(np.ceil(len(frame['x'])/480)))
+    for i,y in enumerate(values):
+        if 'phase' in options and i==len(values)-1:y=y[::stride]
+        position['data'][i]['y']=y.tolist()
     if 'phase' in options:
-        position['data'][len(values)-1]['marker']['color']=np.angle(frame['fields']['psi']).tolist()
-        position['data'][len(values)-1]['customdata']=np.angle(frame['fields']['psi']).tolist()
+        position['data'][len(values)-1]['marker']['color']=np.angle(frame['fields']['psi'])[::stride].tolist()
+        position['data'][len(values)-1]['customdata']=np.angle(frame['fields']['psi'])[::stride].tolist()
     position['layout']['annotations']=[wall_center_annotation(frame['mean'])]
     position['layout']['shapes'][2]['x0']=frame['mean']
     position['layout']['shapes'][2]['x1']=frame['mean']
@@ -544,7 +548,7 @@ def phase_clock_arrow(psi,a):
 
 
 def wall_phase_detail(k0,sk,mass,t):
-    x=np.linspace(-8,0,601)
+    x=np.linspace(-8,0,241)
     fields=wall_packet(x,t,k0,1/(2*sk),mass)
     a=wall_frame(k0,sk,mass,t)['amp0']
     fig=make_subplots(rows=3,cols=2,shared_xaxes=True,vertical_spacing=.13,horizontal_spacing=.09,
@@ -659,7 +663,7 @@ app.layout=html.Div([
     html.Details([html.Summary('모형과 그래프 읽는 법'),dcc.Markdown(r'수업 표기: 일반 파동함수는 $\Psi(x,t)$, 에너지 고유함수는 $\psi_n(x)$입니다. 따라서 $\Psi(x,t)=\sum_n c_n\psi_n(x)e^{-iE_nt/\hbar}$로 씁니다. $A_0$는 그래프의 초기 진폭 기준이며 고유함수 $\psi_0$와 구분합니다. 푸리에 변환 1~3단계의 기저는 무한우물의 $\psi_n$입니다.',mathjax=True),html.P('무한 퍼텐셜 우물, 조화진동자, 자유입자는 1차원 비상대론적 양자역학 모형입니다. 푸리에 변환 실험은 직교성·성분 추출·재구성을 물리계 사이에 연결합니다. Ψ는 복소 파동함수, |Ψ|²는 위치 확률밀도이며, Δx와 Δk는 확률분포의 표준편차입니다. 불확정성은 측정 기기의 부정확성을 뜻하지 않습니다.'),html.P('자유입자 아래의 벽 반사는 반직선 영역의 벽 하나를 다룹니다. 무한 퍼텐셜 우물은 양쪽 벽 사이의 별도 모형입니다. 모든 파수에서 반사 확률이 1이며 벽에서 Ψ=0입니다. 색은 복소 파동함수의 위상이며 확률을 나타내지 않습니다.')]),
     html.Details([html.Summary('수업에 활용하는 순서'),html.P('무한 퍼텐셜 우물에서 경계조건과 에너지 양자화를 탐구하고, 조화진동자의 에너지 고유상태와 중첩을 비교합니다. 자유입자에서는 평면파 → 중첩 → 푸리에 변환 → 파동묶음의 운동 → 벽 반사 순으로 탐구합니다. 푸리에 변환의 1~3단계는 무한우물의 사인 기저를 이용하고 4단계에서 자유입자의 연속 평면파 기저로 확장합니다.')]),
     html.Footer(['AI 기반 물리 시뮬레이션 교육 · 전남대학교 물리교육과 · 개발: 황정운',html.Br(),'실행 환경: Python · Dash · uv']),
-    dcc.Interval(id='clock',interval=80,disabled=True),dcc.Store(id='render-busy',data=False),dcc.Store(id='time-limit',data={'end':10}),dcc.Download(id='download')],className='page')
+    dcc.Interval(id='clock',interval=80,disabled=True),dcc.Store(id='render-busy',data=False),dcc.Store(id='browser-model'),dcc.Store(id='server-time',data=0),dcc.Store(id='time-limit',data={'end':10}),dcc.Download(id='download')],className='page')
 
 
 SYSTEM_EXPERIMENTS={
@@ -872,9 +876,9 @@ def configure_fourier_stage(stage):
 
 
 @app.callback(Output('component-plot','figure'),Output('component-title','children'),Output('component-note','children'),Output('component-panel','style'),Output('component-plot','style'),
-              Input('mode','value'),Input('k0','value'),Input('sigma-k','value'),Input('count','value'),Input('pulse-width','value'),Input('time','value'),Input('mass','value'),Input('ft-state','data'))
+              Input('mode','value'),Input('k0','value'),Input('sigma-k','value'),Input('count','value'),Input('pulse-width','value'),Input('server-time','data'),Input('mass','value'),Input('ft-state','data'))
 def render_components(mode,k0,sk,count,sigma,t,mass,fourier_state=None):
-    if mode!='wall' and set(ctx.triggered_prop_ids)=={'time.value'}:
+    if mode!='wall' and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         return (no_update,)*5
     changed={prop.split('.')[0] for prop in ctx.triggered_prop_ids}
     if changed & {'mode','k0','sigma-k','mass'}:t=0
@@ -882,9 +886,9 @@ def render_components(mode,k0,sk,count,sigma,t,mass,fourier_state=None):
         fig,title,note,height=ft.detail_figure(fourier_state or ft.DEFAULT_STATE,styled_fig,line)
         return fig,title,note,{}, {'--component-height':f'{height}px','height':f'{height}px','minHeight':f'{height}px','width':'100%'}
     if mode=='wall':
-        if set(ctx.triggered_prop_ids)=={'time.value'}:
+        if set(ctx.triggered_prop_ids)=={'server-time.data'}:
             patch=Patch()
-            fields=wall_packet(np.linspace(-8,0,601),t,k0,1/(2*sk),mass)
+            fields=wall_packet(np.linspace(-8,0,241),t,k0,1/(2*sk),mass)
             a=wall_frame(k0,sk,mass,t)['amp0']
             for i,key in enumerate(['incident','reflected','psi']):
                 amplitude=np.abs(fields[key])/a
@@ -902,10 +906,21 @@ def render_components(mode,k0,sk,count,sigma,t,mass,fourier_state=None):
         fig,title,note,height=wall_phase_detail(k0,sk,mass,t)
         return fig,title,note,{}, {'--component-height':f'{height}px','height':f'{height}px','minHeight':f'{height}px','width':'100%'}
     if mode!='build':return go.Figure(),'','',{'display':'none'},{'--component-height':'0px','height':'0px','minHeight':'0px'}
-    if set(ctx.triggered_prop_ids)=={'time.value'}:
+    if set(ctx.triggered_prop_ids)=={'server-time.data'}:
         return (no_update,)*5
     fig,title,note,height=component_figure(mode,k0,sk,count,sigma,t)
     return fig,title,note,{} if height else {'display':'none'},{'--component-height':f'{height}px','height':f'{height}px','minHeight':f'{height}px','width':'100%'}
+
+
+def limit_phase_markers(figure):
+    # Lines retain every sample; excessive overlapping phase dots only add SVG work.
+    for trace in figure.data:
+        if '색 = 위상' not in (trace.name or '') or trace.x is None:continue
+        step=max(1,int(np.ceil(len(trace.x)/480)))
+        trace.x=np.asarray(trace.x)[::step]
+        trace.y=np.asarray(trace.y)[::step]
+        trace.marker.color=np.asarray(trace.marker.color)[::step]
+        if trace.customdata is not None:trace.customdata=np.asarray(trace.customdata)[::step]
 
 
 def playback_position_patch(figure,move_grid=False):
@@ -927,25 +942,27 @@ def playback_position_patch(figure,move_grid=False):
 
 PARAMS=[Input('mode','value'),Input('k0','value'),Input('sigma-k','value'),Input('count','value'),Input('mass','value'),Input('pulse-width','value'),Input('time','value'),Input('options','value'),Input('ho-state','data')]
 @app.callback(Output('position','figure'),Output('spectrum','figure'),Output('metrics','children'),Output('concept','children'),Output('questions','children'),Output('status','children'),Output('position-note','children'),Output('spectrum-note','children'),Output('position-title','children'),Output('spectrum-title','children'),Output('lesson-title','children'),Output('lesson-desc','children'),Output('unit-label','children'),
-              Output('k0-value','children'),Output('sigma-k-value','children'),Output('count-value','children'),Output('mass-value','children'),Output('pulse-width-value','children'),Output('time-value','children'),*PARAMS,Input('axis-mode','value'),Input('y-zoom','value'),Input('ft-state','data'),Input('well-state','data'),running=[(Output('render-busy','data'),True,False)])
-def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,fourier_state=None,well_state=None):
+              Output('k0-value','children'),Output('sigma-k-value','children'),Output('count-value','children'),Output('mass-value','children'),Output('pulse-width-value','children'),Output('time-value','children'),*[Input('server-time','data') if p.component_id=='time' else p for p in PARAMS],Input('axis-mode','value'),Input('y-zoom','value'),Input('ft-state','data'),Input('well-state','data'),State('time','value'),running=[(Output('render-busy','data'),True,False)])
+def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,fourier_state=None,well_state=None,actual_time=None):
+    if mode in playback.LOCAL_MODES and actual_time is not None:t=actual_time
     changed={prop.split('.')[0] for prop in ctx.triggered_prop_ids}
     if changed & {'mode','k0','sigma-k','mass','ho-state','well-state'}:
         t=0  # Render new initial conditions at t=0 even while the time reset is pending.
-    if mode=='oscillator' and set(ctx.triggered_prop_ids)=={'time.value'}:
+    if mode=='oscillator' and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         try:
             position,metrics=ho.time_patch(harmonic_state,t,opts,axis_mode,zoom,metric)
             return (position,no_update,metrics)+(no_update,)*15+(f'{t:.2f}',)
         except (ValueError,TypeError,KeyError):
             pass  # Invalid initial conditions keep the input message visible.
-    if mode=='wall' and set(ctx.triggered_prop_ids)=={'time.value'}:
+    if mode=='wall' and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         position,spectral,metrics=wall_frame_patches(k0,sk,mass,t,opts,axis_mode,zoom)
         return (position,spectral,metrics)+(no_update,)*15+(f'{t:.2f}',)
-    if mode=='mirror' and set(ctx.triggered_prop_ids)=={'time.value'}:
+    if mode=='mirror' and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         return (mirror_position_patch(k0,sigma,t,opts,axis_mode,zoom),)+(no_update,)*17+(f'{t:.2f}',)
     t=0 if mode=='build' else t
     result=figures(mode,k0,sk,count,mass,sigma,t,opts,axis_mode,zoom,harmonic_state,fourier_state,well_state)
-    if mode in ('plane','free','well') and set(ctx.triggered_prop_ids)=={'time.value'}:
+    limit_phase_markers(result[0])
+    if mode in ('plane','free','well') and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         position=playback_position_patch(result[0],move_grid=mode=='free' and 'follow' in (opts or []))
         return (position,no_update,result[2])+(no_update,)*15+(f'{t:.2f}',)
     info=MODE_INFO[mode]
@@ -959,9 +976,25 @@ def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,four
     spectrum_title={'orthogonal':'두 기저함수의 곱 · 양과 음의 상쇄','project':'목표 함수와 기저의 곱 · 계수 추출','reconstruct':'추출 계수 먼저 보기 · |cₙ| 크기순','continuous':'파수 공간의 확률밀도 |A(k)|²'}[(fourier_state or ft.DEFAULT_STATE)['stage']] if mode=='fourier' else '에너지 고유상태의 성분 확률' if mode in ('oscillator','well') else '파수 공간'
     outputs=list((*result[:9],spectrum_title,info[1],info[2],unit,
             f'{k0:.2f}',f'{sk:.2f}',str(count),f'{mass:.2f}',f'{sigma:.2f}',f'{t:.2f}'))
-    if set(ctx.triggered_prop_ids)=={'time.value'}:
+    if set(ctx.triggered_prop_ids)=={'server-time.data'}:
         outputs[4]=no_update  # Keep a student's expanded explanation open during playback.
     return tuple(outputs)
+
+
+
+@app.callback(Output('browser-model','data'),Input('mode','value'),Input('k0','value'),Input('mass','value'),Input('sigma-k','value'),Input('options','value'),Input('axis-mode','value'),Input('y-zoom','value'),Input('ho-state','data'),Input('well-state','data'))
+def configure_browser_model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state):
+    return playback.model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state)
+
+
+app.clientside_callback(
+    "function(t,mode){return ['plane','free','well','oscillator','build','fourier'].includes(mode)?dash_clientside.no_update:t;}",
+    Output('server-time','data'),Input('time','value'),Input('mode','value'))
+
+app.clientside_callback(
+    "function(t,model,figure,mode){return window.quantumPlayback.render(t,model,figure,mode);}",
+    Output('position','figure',allow_duplicate=True),Output('metrics','children',allow_duplicate=True),Output('time-value','children',allow_duplicate=True),
+    Input('time','value'),Input('browser-model','data'),State('position','figure'),State('mode','value'),prevent_initial_call=True)
 
 
 @app.callback(Output('download','data'),Input('export','n_clicks'),*[State(p.component_id,p.component_property) for p in PARAMS],State('ft-state','data'),State('well-state','data'),prevent_initial_call=True)
