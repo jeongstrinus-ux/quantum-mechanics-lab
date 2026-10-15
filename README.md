@@ -86,17 +86,19 @@ v_phase(k₀) = k₀/(2m)
 - `browser_playback.py`: 브라우저 재생에 전달하는 초기 조건과 고유함수 기저
 - `assets/browser_playback.js`: 평면파·자유입자·무한우물·조화진동자의 해석식 시간 진화 및 그래프 갱신
 - `physics.py`: 가우스 해석해, Fourier 합성, 완전반사 계산
+- `rectangular_ui.py`: 사각 파동묶음의 조작·수식·그래프·학습 질문
 - `well_ui.py`: 무한 퍼텐셜 우물의 에너지 고유상태와 두 상태의 시간 진화
 - `harmonic_ui.py`: 조화진동자 에너지 고유상태 중첩과 조작 요소
 - `fourier_ui.py`: 직교성, 성분 추출, 재구성, 연속 푸리에 변환
 - `teaching_content.py`: 예측·관찰·설명 질문과 펼쳐 보는 해설
 - `assets/style.css`: 참고 HTML에서 이어온 시각 스타일
 - `assets/slider_input.js`: 슬라이더 숫자 입력에서 Enter로 값 적용
+- `assets/sidebar_scroll.js`: 넓은 화면에서 왼쪽 실험 조건 패널의 독립 스크롤과 화면 높이 맞춤
 - `pyproject.toml`, `uv.lock`: 실행환경과 재현 가능한 패키지 버전
 - `test_physics.py`: 확률 정규화, 평균·폭, Schrödinger 방정식, Fourier 합성, 반사 경계조건, 에너지 보존 검증
 
 ```bash
-uv run pytest test_physics.py -q
+uv run python -m pytest test_physics.py test_browser_playback.py test_rectangular_packet.py -q
 ```
 
 참고 근거:
@@ -139,7 +141,7 @@ x≤0에서 자유 가우스 해와 그 거울상 해를 빼서 경계조건을 
 
 조화진동자의 파형 기준선은 ⟨E⟩/(ℏω)=Σ|cₙ|²(n+1/2)입니다. 표시 좌표는 그 값에 정규화된 파형 높이를 더합니다. 이는 에너지 편차가 아닌 시각화 관례이며 물리 계산과 CSV의 Ψ 값은 바꾸지 않습니다. 확률밀도 면적은 에너지 0 대신 평균 에너지 기준선까지 채웁니다.
 
-배포할 때 `browser_playback.py`와 `fourier_ui.py`도 `app.py`, `physics.py`, `harmonic_ui.py`, `well_ui.py`, `teaching_content.py`, `assets/` 폴더 전체, `pyproject.toml`과 함께 포함합니다. `uv.lock`과 실행 안내인 `README.md`도 포함하는 것을 권장합니다.
+배포할 때 `browser_playback.py`, `rectangular_ui.py`, `fourier_ui.py`도 `app.py`, `physics.py`, `harmonic_ui.py`, `well_ui.py`, `teaching_content.py`, `assets/` 폴더 전체, `pyproject.toml`과 함께 포함합니다. `uv.lock`과 실행 안내인 `README.md`도 포함하는 것을 권장합니다.
 
 푸리에 변환 3단계는 추출한 n=1~60의 계수를 먼저 표시하고 |cₙ| 크기순으로 성분을 추가합니다. N은 포함한 성분 수이며 최대 양자수가 아닙니다. 막대의 부호를 유지하고 실제 n·추가 순서를 툴팁으로 보여줍니다. 같은 후보와 같은 N에서 제곱 오차 적분을 최소화하는 선택이며 부분합을 다시 정규화하지 않습니다.
 
@@ -150,3 +152,17 @@ x≤0에서 자유 가우스 해와 그 거울상 해를 빼서 경계조건을 
 평면파, 자유입자, 무한우물, 조화진동자는 초기 조건을 받은 브라우저가 같은 해석식으로 시간 변화를 계산하므로 재생 프레임마다 Python 서버를 호출하지 않습니다. 벽 반사는 FFT 파수 분포 계산을 위해 Python 서버를 사용합니다. 파형 곡선의 계산 점은 유지하고, 겹치는 위상 색 점은 위치 패널에서 최대 약 480개만 표시합니다. 다른 컴퓨터에 업데이트할 때 새 Python 모듈과 `assets/`를 함께 복사하고 앱 재시작 후 브라우저를 새로고침하세요.
 
 `test_browser_playback.py`는 Node.js가 설치된 환경에서 JavaScript 파동함수와 평균·폭을 NumPy 기준값과 비교합니다. Node.js는 테스트에만 필요하며 앱 실행에는 필요하지 않습니다.
+
+### 교과서 예시: 사각 파동묶음
+
+자유입자의 `4-1 가우스 파동묶음`과 `4-2 사각 파동묶음`을 선택할 수 있습니다. 사각형은 |x|<a에서 Ψ(x,0)=exp(ik₀x)/√(2a), 그 밖에서는 0입니다. 기본 k₀=0이며 a=0.5~6, k₀=−4~4를 조절합니다. 유니터리 Fourier 변환은 φ(k)=√(a/π) sin[a(k−k₀)]/[a(k−k₀)]이고 파수 확률밀도는 |φ|²입니다. x축 [−24,24]과 k축 [−12,12]는 입력 변화와 재생 중에도 고정하며 표시 구간에서 확률을 다시 정규화하지 않습니다.
+
+a를 줄이면 첫 영점 사이의 중심 봉우리 폭 Wₖ=2π/a가 넓어집니다. 이 이상적인 불연속 상태는 파수 분산과 평균 운동에너지가 발산하므로 Wₖ를 Δk로 표기하지 않습니다. t>0의 위치 분산도 발산하며, 흰 점선은 기댓값 ⟨x⟩가 아닌 대칭 중심 x_c=k₀t/m입니다. 양의 k₀는 분포 전체를 양의 파수로 제한하는 조건이 아니라 공간 위상 exp(ik₀x)를 곱하는 조건입니다. 밀도는 정지한 파동묶음의 시간 진화 결과를 k₀t/m만큼 평행 이동한 형태입니다.
+
+시간 진화는 자유입자 전파핵의 초기 구간 적분을 Fresnel 적분으로 계산합니다. Python은 Gauss–Legendre 구적과 점근 전개, 브라우저는 작은 재사용 표의 3차 Hermite 보간과 점근 전개를 사용합니다. 큰 FFT나 시간별 서버 요청은 사용하지 않으며 새 필수 패키지도 추가하지 않았습니다. Fresnel 함수의 정의와 전개는 [NIST DLMF 7.2](https://dlmf.nist.gov/7.2)와 [7.12](https://dlmf.nist.gov/7.12)를 따릅니다.
+
+`test_rectangular_packet.py`는 직접 Fourier 적분, 독립적인 전파핵 적분, 자유 Schrödinger 방정식, Galilean 평행 이동 및 브라우저 결과를 검증합니다.
+
+사각 파동묶음의 파수 패널은 위에 초기 진폭 φ(k,0), 아래에 |φ(k)|²를 같은 k축으로 표시합니다. 초기 진폭의 음의 곁봉우리와 제곱 후의 비음수 밀도를 비교할 수 있습니다. 초기 φ(k,0) 그래프는 재생 중 고정하며, 실제 시간 변화는 φ(k,t)=φ(k,0)exp[−ik²t/(2m)]임을 안내합니다.
+
+사각 파동묶음의 초기조건은 두 가지로 구분합니다. 「실수 사각형」은 Ψ 자체가 실수 상수이며 k₀=0으로 고정됩니다. 「사각 진폭 + 공간 위상」은 exp(ik₀x)/√(2a)의 별도 초기조건으로, k₀ 조절이 나타납니다. 초기 확률밀도는 같아도 파동함수의 공간 위상과 시간 진화가 다르며, 화면 수식과 기본 실수부·허수부 표시도 선택에 맞춰 바뀝니다.

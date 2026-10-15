@@ -8,6 +8,20 @@
         const type={f8:Float64Array,f4:Float32Array,i4:Int32Array,u4:Uint32Array,i2:Int16Array,u2:Uint16Array,i1:Int8Array,u1:Uint8Array}[value.dtype];
         return type?new type(bytes.buffer):[];
     }
+    function fresnel(x,table) {
+        const sign=x<0?-1:1,u=Math.abs(x);
+        if(u<=6) {
+            const h=table.step,i=Math.min(table.c.length-2,Math.floor(u/h)),v=(u-i*h)/h;
+            const h00=2*v*v*v-3*v*v+1,h10=v*v*v-2*v*v+v,h01=-2*v*v*v+3*v*v,h11=v*v*v-v*v;
+            const p0=Math.PI*(i*h)**2/2,p1=Math.PI*((i+1)*h)**2/2;
+            return [sign*(h00*table.c[i]+h10*h*Math.cos(p0)+h01*table.c[i+1]+h11*h*Math.cos(p1)),sign*(h00*table.s[i]+h10*h*Math.sin(p0)+h01*table.s[i+1]+h11*h*Math.sin(p1))];
+        }
+        const den=Math.PI*Math.PI*u**4;let f=1,g=1,tf=1,tg=1;
+        for(let n=1;n<=12;n++){tf*=-(4*n-1)*(4*n-3)/den;tg*=-(4*n+1)*(4*n-1)/den;f+=tf;g+=tg;}
+        f/=Math.PI*u;g/=Math.PI*Math.PI*u**3;
+        const p=Math.PI*u*u/2;
+        return [sign*(.5+f*Math.sin(p)-g*Math.cos(p)),sign*(.5-f*Math.cos(p)-g*Math.sin(p))];
+    }
     function frame(m,t) {
         let x=m.x, re=[], im=[], mean=0, sd=0, sdP=0, norm=1;
         const offset=m.mode==='oscillator'?m.energy:0, amp=m.amp || 1;
@@ -23,6 +37,19 @@
                 const d=v-mean, a=Math.pow(1+b*b,-.25)*Math.exp(-d*d/(4*sx*sx*(1+b*b)));
                 const p=-.5*Math.atan(b)+d*d*b/(4*sx*sx*(1+b*b))+m.k*v-m.k*m.k*t/(2*m.mass);
                 re.push(a*Math.cos(p));im.push(a*Math.sin(p));
+            }
+        } else if(m.mode==='rect') {
+            mean=m.k*t/m.mass;sd=null;sdP=null;
+            for(const v of x) {
+                let r=0,i=0;
+                if(t===0) {r=Math.abs(v)<m.a?1:0;}
+                else {
+                    const scale=Math.sqrt(m.mass/(Math.PI*t));
+                    const fp=fresnel((v-mean+m.a)*scale,m.fresnel),fm=fresnel((v-mean-m.a)*scale,m.fresnel);
+                    const dc=fp[0]-fm[0],ds=fp[1]-fm[1];r=(dc+ds)/2;i=(ds-dc)/2;
+                }
+                const p=m.k*v-m.k*m.k*t/(2*m.mass);
+                re.push(r*Math.cos(p)-i*Math.sin(p));im.push(r*Math.sin(p)+i*Math.cos(p));
             }
         } else {
             const cr=m.cr.map((v,n)=>v*Math.cos(m.energies[n]*t)+m.ci[n]*Math.sin(m.energies[n]*t));
@@ -52,7 +79,7 @@
     function render(t,m,base,mode) {
         const no=window.dash_clientside.no_update;
         if(!m || m.mode!==mode || !base || !base.data || !base.data.length)return [no,no,no];
-        const expected={plane:'plane',free:'free',well:'well',oscillator:'oscillator'}[mode];
+        const expected={plane:'plane',free:'free',well:'well',oscillator:'oscillator',rect:'rect'}[mode];
         if(base.layout.uirevision!==expected)return [no,no,no];
         const f=frame(m,Number(t||0)), layout=JSON.parse(JSON.stringify(base.layout));
         const data=base.data.map(tr=>{
@@ -85,6 +112,7 @@
             const index=mode==='well'?2:mode==='oscillator'?1:0;
             if(shapes[index])shapes[index].x0=shapes[index].x1=f.mean;
             if(annotations[0])annotations[0].x=f.mean;
+            if(mode==='rect' && annotations[0]){annotations[0].xanchor=f.mean>0?'right':'left';annotations[0].xshift=f.mean>0?-8:8;}
             if(mode==='free') {
                 if(shapes[1]){shapes[1].x0=f.mean-f.sd;shapes[1].x1=f.mean+f.sd;}
                 layout.xaxis.range=[f.x[0],f.x[f.x.length-1]];
@@ -102,11 +130,12 @@
             else {const edge=Math.max(Math.abs(lo),Math.abs(hi),1e-8)*1.12/m.zoom;layout.yaxis.range=lo< -1e-9?[-edge,edge]:[-.035*edge,edge];if(mode==='plane')layout.yaxis.range[1]=Math.max(1.95,layout.yaxis.range[1]);}
         }
         let metrics=no;
+        if(mode==='rect')metrics=[metric('대칭 중심 x_c',f.mean.toFixed(3)),metric('중심 이동 속도 v_c / v₀',(m.k/m.mass).toFixed(3)),metric('초기 위치 표준편차 Δx₀',(m.a/Math.sqrt(3)).toFixed(3)),metric('파수 중심 봉우리 폭 · 첫 영점 사이',(2*Math.PI/m.a).toFixed(3))];
         if(mode==='free')metrics=[metric('평균 위치 ⟨x⟩',f.mean.toFixed(3)),metric('위치 표준편차 Δx',f.sd.toFixed(3)),metric('파수 표준편차 Δk',m.sk.toFixed(3)),metric('현재 Δx(t)·Δp / ℏ',(f.sd*m.sk).toFixed(5))];
         if(mode==='well')metrics=[metric('평균 위치 ⟨x⟩ / L',f.mean.toFixed(3)),metric('위치 표준편차 Δx / L',f.sd.toFixed(3)),metric('평균 에너지 / E₁',m.energy.toFixed(3)),metric('확률 총합',f.norm.toFixed(5))];
         if(mode==='oscillator')metrics=[metric('평균 위치 ⟨x⟩',f.mean.toFixed(3)),metric('위치 표준편차 Δx',f.sd.toFixed(3)),metric('현재 Δx·Δp / ℏ',(f.sd*f.sdP).toFixed(5)),metric('평균 에너지 / ℏω',m.energy.toFixed(3))];
         return [{data,layout},metrics,Number(t||0).toFixed(2)];
     }
-    window.quantumPlayback={frame,render};
+    window.quantumPlayback={frame,render,fresnel};
     window.dash_clientside=Object.assign({},window.dash_clientside,{quantum:{render}});
 })();

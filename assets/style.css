@@ -20,17 +20,17 @@
 
 #ho-controls h3{margin-top:14px}#ho-controls .hint{margin:10px 0}.ho-table-scroll{max-height:330px;overflow:auto;margin:12px 0;border:1px solid var(--line);border-radius:8px}.ho-table{width:100%;border-collapse:collapse;font-size:13px}.ho-table th{position:sticky;top:0;background:#10223a;padding:7px}.ho-table td{padding:5px;border-top:1px solid var(--line)}.ho-table td:first-child{text-align:center;min-width:25px}.ho-table input{width:100%;min-width:0;color:var(--text);background:#071524;border:1px solid var(--line);border-radius:5px;padding:6px;font-size:13px}#ho-controls .dash-dropdown{font-size:13px}
 
-.controls:has(#ho-controls:not([style*="none"])){position:static}
+
 
 #ho-preset,#ho-preset .dash-dropdown-value,#ho-preset .dash-dropdown-value-item,#ho-preset .dash-dropdown-value-item span,#ho-preset .dash-dropdown-trigger-icon{color:var(--text)!important}.ho-table th:first-child{width:28px}.ho-table th:nth-child(2){width:55%}
 
 .ho-number-control{display:grid;grid-template-columns:20px minmax(0,1fr) 20px;align-items:center;gap:2px}.ho-number-control .dash-input-container{min-width:0;width:100%}.ho-number-control .dash-input-stepper{display:none!important}.ho-number-control>button{padding:1px;min-height:28px;height:28px;border-radius:4px;font-size:15px;background:#10223a;color:var(--text)}.ho-number-control input{padding:5px 2px}
 
-.ft-stages{display:grid;gap:9px;margin:14px 0}.ft-stages label{font-size:14px;color:var(--text)}.ft-stages input{accent-color:var(--cyan);margin-right:7px}#ft-controls .hint{margin:8px 0}.controls:has(#ft-controls:not([style*="none"])){position:static}
+.ft-stages{display:grid;gap:9px;margin:14px 0}.ft-stages label{font-size:14px;color:var(--text)}.ft-stages input{accent-color:var(--cyan);margin-right:7px}#ft-controls .hint{margin:8px 0}
 
 #ft-shape,#ft-shape .dash-dropdown-value,#ft-shape .dash-dropdown-value-item,#ft-shape .dash-dropdown-value-item span,#ft-shape .dash-dropdown-trigger-icon{color:var(--text)!important}
 
-.english-title{color:var(--cyan);font-size:15px;margin-bottom:8px}.experiment-nav{padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}.experiment-tabs{margin:8px 0 0}.experiment-tabs .lesson-tab{font-size:14px;padding:10px!important}.eyebrow{letter-spacing:.04em}.controls:has(#well-controls:not([style*="none"])){position:static}
+.english-title{color:var(--cyan);font-size:15px;margin-bottom:8px}.experiment-nav{padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}.experiment-tabs{margin:8px 0 0}.experiment-tabs .lesson-tab{font-size:14px;padding:10px!important}.eyebrow{letter-spacing:.04em}
 @media(max-width:600px){.lesson-tabs{flex-wrap:wrap}.lesson-tab{min-width:120px}.experiment-tabs .lesson-tab{min-width:140px}}
 
 .well-step-control{display:grid;grid-template-columns:32px minmax(0,1fr) 32px;align-items:center;gap:8px}.well-step-control>button{padding:0;min-height:32px;height:32px;border-radius:6px}.well-step-control>.dash-slider{min-width:0}
@@ -107,3 +107,13 @@ main{grid-template-columns:340px minmax(0,1fr)}
 #vector-intro-graph .updatemenu-header:hover .updatemenu-item-text tspan{fill:#04202a!important}
 
 .completeness-intro{margin:14px 0;padding:14px 16px;border-left:3px solid var(--good);background:#10223a;border-radius:8px}.completeness-intro strong{color:var(--text);font-size:18px}
+
+.rectangular-content .spectrum-graph{height:620px!important;min-height:620px;width:100%}
+
+/* Keep the experiment controls scrollable independently of the plots. */
+@media(min-width:951px){
+  main>.controls{position:sticky;top:12px;max-height:var(--controls-available-height,calc(100dvh - 24px));overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-gutter:stable;scrollbar-color:#496078 #071524}
+  main>.controls::-webkit-scrollbar{width:10px}
+  main>.controls::-webkit-scrollbar-track{background:#071524;border-radius:8px}
+  main>.controls::-webkit-scrollbar-thumb{background:#496078;border:2px solid #071524;border-radius:8px}
+}

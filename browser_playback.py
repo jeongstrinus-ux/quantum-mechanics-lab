@@ -4,10 +4,13 @@ import harmonic_ui as ho
 import well_ui as well
 from physics import sine_basis
 
-LOCAL_MODES=('plane','free','well','oscillator')
+LOCAL_MODES=('plane','free','well','oscillator','rect')
 
 
-def model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state):
+def model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state=None):
+    if mode=='rect':
+        import rectangular_ui as rect
+        return rect.model(rect_state or rect.DEFAULT_STATE,mass,options,axis,zoom)
     if mode not in LOCAL_MODES:return None
     result=dict(mode=mode,k=k,mass=mass,sk=sk,options=options or [],axis=axis,zoom=zoom)
     if mode=='plane':result['x']=np.linspace(-15,15,1801).tolist()

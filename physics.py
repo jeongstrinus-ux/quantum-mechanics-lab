@@ -7,6 +7,7 @@ No finite dielectric step, absorption or finite-box dynamics.
 """
 from __future__ import annotations
 import numpy as np
+from functools import lru_cache
 
 
 def gaussian_packet(x, t: float, k0: float, sigma_x: float, mass: float = 1.0, x0: float = 0.0):
@@ -200,3 +201,64 @@ def gaussian_fourier_amplitude(k,k0,sigma_x,x0=0.):
     """Unitary Fourier transform of gaussian_packet(x,0,...,x0)."""
     k=np.asarray(k,dtype=float)
     return (2*sigma_x**2/np.pi)**.25*np.exp(-sigma_x**2*(k-k0)**2)*np.exp(-1j*k*x0)
+
+
+def rectangular_spectrum(k,a,k0=0.):
+    """Unitary Fourier amplitude of exp(i*k0*x)/sqrt(2a) on |x|<a.
+
+    np.sinc uses sin(pi*z)/(pi*z). The density has infinite second moment.
+    """
+    if a<=0:raise ValueError('a must be positive')
+    return np.sqrt(a/np.pi)*np.sinc(a*(np.asarray(k)-k0)/np.pi)
+
+
+def fresnel_cs(x):
+    """C,S in the NIST DLMF 7.2 convention, without a SciPy dependency.
+
+    64-point Gauss-Legendre integration for |x|<=6; auxiliary-function
+    asymptotic expansions (DLMF 7.12) outside. Valid for real arguments.
+    """
+    x=np.asarray(x,dtype=float);u=np.abs(x);c=np.empty_like(u);s=np.empty_like(u)
+    small=u<=6
+    nodes,weights=_fresnel_quadrature()
+    z=u[small,None]*(nodes+1)/2
+    angle=np.pi*z*z/2
+    c[small]=u[small]/2*(np.cos(angle)@weights)
+    s[small]=u[small]/2*(np.sin(angle)@weights)
+    v=u[~small];den=np.pi**2*v**4
+    f=np.ones_like(v);g=np.ones_like(v);tf=np.ones_like(v);tg=np.ones_like(v)
+    for n in range(1,13):
+        tf*=-(4*n-1)*(4*n-3)/den;tg*=-(4*n+1)*(4*n-1)/den
+        f+=tf;g+=tg
+    f/=np.pi*v;g/=np.pi**2*v**3
+    angle=np.pi*v*v/2
+    c[~small]=.5+f*np.sin(angle)-g*np.cos(angle)
+    s[~small]=.5-f*np.cos(angle)-g*np.sin(angle)
+    return c*np.sign(x),s*np.sign(x)
+
+
+@lru_cache(maxsize=1)
+def _fresnel_quadrature():
+    return np.polynomial.legendre.leggauss(64)
+
+
+@lru_cache(maxsize=1)
+def fresnel_browser_table():
+    """Small reusable table for cubic Hermite interpolation in the browser."""
+    x=np.linspace(0,6,4097);c,s=fresnel_cs(x)
+    return dict(step=float(x[1]),c=c.tolist(),s=s.tolist())
+
+
+def rectangular_packet(x,t,a,k0=0.,mass=1.):
+    """Full-line free propagation of the discontinuous, normalized rectangle.
+
+    This is the propagator integral over [-a,a], evaluated using Fresnel
+    functions. No periodic box, FFT truncation, or visible-window renormalizing.
+    """
+    if a<=0 or mass<=0 or t<0:raise ValueError('a,mass>0 and t>=0 are required')
+    x=np.asarray(x,dtype=float)
+    if t==0:return np.where(np.abs(x)<a,1/np.sqrt(2*a),0.)*np.exp(1j*k0*x)
+    y=x-k0*t/mass;scale=np.sqrt(mass/(np.pi*t))
+    cp,sp=fresnel_cs((y+a)*scale);cm,sm=fresnel_cs((y-a)*scale)
+    psi=((cp-cm)+(sp-sm)+1j*((sp-sm)-(cp-cm)))/2
+    return psi/np.sqrt(2*a)*np.exp(1j*(k0*x-k0*k0*t/(2*mass)))
