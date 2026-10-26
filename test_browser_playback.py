@@ -11,7 +11,7 @@ import well_ui as well
 from physics import gaussian_packet, oscillator_moments
 
 
-@pytest.mark.parametrize('mode',[m for m in playback.LOCAL_MODES if m!='rect'])
+@pytest.mark.parametrize('mode',[m for m in playback.LOCAL_MODES if m not in ('rect','beat','dispersion')])
 @pytest.mark.parametrize('time',[0.,.37,3.1])
 def test_browser_wavefunction_and_moments_match_numpy(mode,time):
     node=shutil.which('node')

@@ -13,6 +13,8 @@ import fourier_ui as ft
 import well_ui as well
 import browser_playback as playback
 import rectangular_ui as rect
+import beat_ui as beat
+import dispersion_ui as dispersion
 from physics import gaussian_packet, gaussian_width, k_density, progressive_superposition, mirror_fields, mirror_envelopes, mirror_component, wall_packet, wall_plane_mode
 
 CYAN, PINK, YELLOW, BLUE, GREEN = '#48d7ff', '#ff7daf', '#ffd166', '#76a9ff', '#74e0aa'
@@ -49,6 +51,8 @@ def component_circles(fig,ks,heights,colors,label,reflected=False):
                             customdata=np.arange(1,len(ks)+1),
                             hovertemplate='대표 성분 %{customdata}<br>k=%{x:.3f}<br>분포 높이=%{y:.4f}<extra></extra>'))
 MODE_INFO = {
+    'dispersion': ('02','여러 파수의 파동묶음 · 무분산과 물질파','같은 초기 가우스 파동묶음이 모양을 유지하거나 퍼지는 모습을 비교합니다.'),
+    'beat': ('01-2','맥놀이와 군속도 · 두 분산관계 비교','두 평면파가 만드는 포락선과 내부 위상의 이동을 비교합니다.'),
     'rect': ('04-2','자유입자 · 사각 파동묶음','사각형 초기 상태의 푸리에 변환과 폭, 공간 위상에 따른 자유 운동을 비교합니다.'),
     'well': ('01', '무한 퍼텐셜 우물 · 에너지 고유상태와 중첩', '양쪽 벽의 경계조건, 에너지 양자화와 두 에너지 고유상태의 중첩에 따른 간섭을 탐구합니다.'),
     'plane': ('01', '자유입자 · 평면파', '하나의 파수는 운동량을 정하지만 위치를 국소화하지 않습니다.'),
@@ -277,8 +281,10 @@ def fit_vertical_axis(fig, axis_mode='auto', zoom=1.0):
     fig.update_layout(yaxis_uirevision=f'{axis_mode}-{zoom}')
 
 
-def figures(mode,k0,sigma_k,count,mass,pulse_sigma,t,options,axis_mode='fixed',zoom=1.0,harmonic_state=None,fourier_state=None,well_state=None,rect_state=None):
+def figures(mode,k0,sigma_k,count,mass,pulse_sigma,t,options,axis_mode='fixed',zoom=1.0,harmonic_state=None,fourier_state=None,well_state=None,rect_state=None,beat_kind='linear'):
     """All plots and metrics derive from physics.py; no animation-only motion."""
+    if mode=='dispersion':return dispersion.figures(k0,sigma_k,mass,t,options,axis_mode,zoom,styled_fig,line,metric,fit_vertical_axis)
+    if mode=='beat':return beat.figures(k0,sigma_k,mass,t,options,axis_mode,zoom,styled_fig,line,metric,fit_vertical_axis,beat_kind)
     if mode=='rect':
         return rect.figures(rect_state or rect.DEFAULT_STATE,mass,t,options,axis_mode,zoom,styled_fig,line,metric,fit_vertical_axis)
     if mode=='well':
@@ -510,7 +516,7 @@ def figures(mode,k0,sigma_k,count,mass,pulse_sigma,t,options,axis_mode='fixed',z
                 concepts.insert(0,html.P('연속 가우스 모형 · 모든 k∈(−∞,∞) 사용 · N 제한 없음',className='formula'))
                 title='자유입자 · 복소 파동함수와 위치 확률밀도'
             data=dict(x=x,real=shown.real,imag=shown.imag,density=np.abs(shown)**2)
-    if mode in ('build','free','wall'):
+    if mode in ('build','free','wall','beat'):
         concepts.append(dcc.Markdown(r'**파수 폭을 읽는 법:** 중심 파수 $k_0$는 분포의 중심, 파수 폭 $\sigma_k$는 그 주변에 파수들이 얼마나 넓게 퍼져 있는지를 나타냅니다. 폭이 작으면 비슷한 파장의 파들이, 폭이 크면 더 다양한 파장의 파들이 중첩됩니다. 가우스 기준에서는 $\Delta x_0=\frac{1}{2\sigma_k}$이므로 파수 폭이 클수록 **초기** 위치 분포는 좁아집니다.',mathjax=True))
         concepts.append(dcc.Markdown(r'정확히는 $\sigma_k$가 기준 가우스 파수 확률밀도 $|A(k)|^2$의 **표준편차**입니다. 이는 분포의 퍼진 정도를 나타내며 포함되는 파수 범위의 양 끝을 정하는 값은 아닙니다. 중첩 실험에서는 연속 목표 분포의 폭, 벽 반사에서는 초기 가우스 $g$의 폭이며 실제로 표시한 상태의 폭과 구분합니다.',mathjax=True))
     if mode=='wall':
@@ -638,7 +644,7 @@ app=Dash(__name__,assets_folder=str(Path(__file__).parent/'assets'))
 app.title='양자역학 시뮬레이션 실험실'
 app.layout=html.Div([
     html.Header([html.Div([html.Div('AI 기반 물리 시뮬레이션 교육 · 전남대학교 물리교육과',className='eyebrow'),html.H1('양자역학 시뮬레이션 실험실'),html.Div('Quantum Mechanics Lab',className='english-title'),html.P('퍼텐셜에 따른 에너지 고유상태와 파동함수의 중첩, 시간 변화를 직접 탐구합니다.')]),html.Div(id='unit-label',className='unit')]),
-    dcc.Tabs(id='system',value='well',children=[dcc.Tab(label=label,value=value,className='lesson-tab',selected_className='lesson-tab-selected') for value,label in [('well','01 무한 퍼텐셜 우물'),('oscillator','02 조화진동자'),('free','03 자유입자')]],className='lesson-tabs'),
+    dcc.Tabs(id='system',value='well',children=[dcc.Tab(label=label,value=value,className='lesson-tab',selected_className='lesson-tab-selected') for value,label in [('well','01 무한 퍼텐셜 우물'),('oscillator','02 조화진동자'),('waves','03 파동과 분산'),('free','04 자유입자')]],className='lesson-tabs'),
     html.Div([html.Span('하위 실험',className='mini'),dcc.Tabs(id='mode',value='well',children=[dcc.Tab(label='에너지 고유상태 · 중첩 · 시간 변화',value='well',className='lesson-tab',selected_className='lesson-tab-selected')],className='lesson-tabs experiment-tabs')],className='experiment-nav'),
     html.Div([html.H2(id='lesson-title'),html.P(id='lesson-desc')],className='intro'),
     html.Main([
@@ -650,7 +656,7 @@ app.layout=html.Div([
                 slider('mass','입자 질량 m',.5,4,.1,1,'같은 k₀·σₖ·시간에서 질량이 크면 이동과 퍼짐이 느립니다.'),
                 slider('pulse-width','빛의 펄스 폭 σ',1,4,.1,2.5,'전기장 포락선 exp[−(x−x₀)²/(4σ²)]'),
             ],className='controlgrid'),
-            ho.controls(),ft.controls(),well.controls(),rect.controls(),
+            ho.controls(),ft.controls(),well.controls(),rect.controls(),beat.controls(),
             slider('time','시간 t',0,10,.01,0),
             html.Div([html.Button('▶ 재생',id='play',className='primary'),html.Button('시간 초기화',id='restart')],className='buttons',id='playback-controls'),
             html.Div([html.Label('재생 속도',htmlFor='speed'),dcc.RadioItems(id='speed',options=[{'label':'0.5배','value':.5},{'label':'1배','value':1},{'label':'3배','value':3}],value=1,inline=True,className='speed-choice')],className='control',id='speed-control'),
@@ -665,7 +671,7 @@ app.layout=html.Div([
             html.Article([html.H3(id='component-title'),dcc.Graph(id='component-plot',responsive=True,className='component-graph',config={'displaylogo':False,'modeBarButtonsToRemove':['select2d','lasso2d'],'toImageButtonOptions':{'format':'png','filename':'wave-components','scale':2}}),html.P(id='component-note',className='plotnote')],id='component-panel',className='plot',style={'display':'none'}),
             html.Section(id='metrics',className='metrics'),html.Section([html.H3('핵심 관계'),html.Div(id='concept'),html.H3('예측 · 관찰 · 설명'),html.Ol(id='questions',className='questions')],className='concept')],className='content',id='experiment-content')]),
     html.Details([html.Summary('모형과 그래프 읽는 법'),dcc.Markdown(r'수업 표기: 일반 파동함수는 $\Psi(x,t)$, 에너지 고유함수는 $\psi_n(x)$입니다. 따라서 $\Psi(x,t)=\sum_n c_n\psi_n(x)e^{-iE_nt/\hbar}$로 씁니다. $A_0$는 그래프의 초기 진폭 기준이며 고유함수 $\psi_0$와 구분합니다. 푸리에 변환 1~3단계의 기저는 무한우물의 $\psi_n$입니다.',mathjax=True),html.P('무한 퍼텐셜 우물, 조화진동자, 자유입자는 1차원 비상대론적 양자역학 모형입니다. 푸리에 변환 실험은 직교성·성분 추출·재구성을 물리계 사이에 연결합니다. Ψ는 복소 파동함수, |Ψ|²는 위치 확률밀도이며, Δx와 Δk는 확률분포의 표준편차입니다. 불확정성은 측정 기기의 부정확성을 뜻하지 않습니다.'),html.P('자유입자 아래의 벽 반사는 반직선 영역의 벽 하나를 다룹니다. 무한 퍼텐셜 우물은 양쪽 벽 사이의 별도 모형입니다. 모든 파수에서 반사 확률이 1이며 벽에서 Ψ=0입니다. 색은 복소 파동함수의 위상이며 확률을 나타내지 않습니다.')]),
-    html.Details([html.Summary('수업에 활용하는 순서'),html.P('무한 퍼텐셜 우물에서 경계조건과 에너지 양자화를 탐구하고, 조화진동자의 에너지 고유상태와 중첩을 비교합니다. 자유입자에서는 평면파 → 중첩 → 푸리에 변환 → 파동묶음의 운동 → 벽 반사 순으로 탐구합니다. 푸리에 변환의 1~3단계는 무한우물의 사인 기저를 이용하고 4단계에서 자유입자의 연속 평면파 기저로 확장합니다.')]),
+    html.Details([html.Summary('수업에 활용하는 순서'),html.P('무한 퍼텐셜 우물에서 경계조건과 에너지 양자화를 탐구하고, 조화진동자의 에너지 고유상태와 중첩을 비교합니다. 파동과 분산에서는 맥놀이 → 여러 파수의 파동묶음 순서로 무분산과 물질파를 비교합니다. 자유입자에서는 평면파 → 중첩 → 푸리에 변환 → 파동묶음의 운동 → 벽 반사 순으로 탐구합니다. 푸리에 변환의 1~3단계는 무한우물의 사인 기저를 이용하고 4단계에서 자유입자의 연속 평면파 기저로 확장합니다.')]),
     html.Footer(['AI 기반 물리 시뮬레이션 교육 · 전남대학교 물리교육과 · 개발: 황정운',html.Br(),'실행 환경: Python · Dash · uv']),
     dcc.Interval(id='clock',interval=80,disabled=True),dcc.Store(id='render-busy',data=False),dcc.Store(id='browser-model'),dcc.Store(id='server-time',data=0),dcc.Store(id='time-limit',data={'end':10}),dcc.Download(id='download')],className='page')
 
@@ -673,6 +679,7 @@ app.layout=html.Div([
 SYSTEM_EXPERIMENTS={
     'well':[('well','에너지 고유상태 · 중첩 · 시간 변화')],
     'oscillator':[('oscillator','에너지 고유상태 · 중첩 · 시간 변화')],
+    'waves':[('beat','1 맥놀이 · 군속도'),('dispersion','2 파동묶음 · 분산 비교')],
     'free':[('plane','1 평면파'),('build','2 파동의 중첩'),('fourier','3 푸리에 변환'),('free','4-1 가우스 파동묶음'),('rect','4-2 사각 파동묶음'),('wall','5 무한 벽에서의 반사')]
 }
 
@@ -730,16 +737,18 @@ def collect_oscillator_state(*values):
     return dict(weights=list(values[:size]),phases=list(values[size:]))
 
 
-def simulation_end(mode,k0,mass,sk,rect_state=None):
+def simulation_end(mode,k0,mass,sk,rect_state=None,beat_kind='linear'):
+    if mode=='dispersion':return 24/(k0/mass)
+    if mode=='beat':return 25/beat.parameters(k0,sk,mass,beat_kind)['vg']
     if mode=='rect':return rect.end_time(rect_state or rect.DEFAULT_STATE,mass)
     if mode=='free':return free_viewport(k0,mass,sk)[2]
     if mode=='wall':return wall_end_time(k0,sk,mass)
     return {'plane':10,'build':1,'oscillator':4*np.pi,'fourier':1,'well':2*np.pi}[mode]
 
 
-@app.callback(Output('time-limit','data'),Input('mode','value'),Input('k0','value'),Input('mass','value'),Input('sigma-k','value'),Input('ho-state','data'),Input('well-state','data'),Input('rect-state','data'))
-def configure_time_limit(mode,k0,mass,sk,harmonic_state,well_state=None,rect_state=None):
-    return dict(end=simulation_end(mode,k0,mass,sk,rect_state),mode=mode,k0=k0,mass=mass,sk=sk,harmonic_state=harmonic_state,well_state=well_state,rect_state=rect_state)
+@app.callback(Output('time-limit','data'),Input('mode','value'),Input('k0','value'),Input('mass','value'),Input('sigma-k','value'),Input('ho-state','data'),Input('well-state','data'),Input('rect-state','data'),Input('beat-kind','value'))
+def configure_time_limit(mode,k0,mass,sk,harmonic_state,well_state=None,rect_state=None,beat_kind='linear'):
+    return dict(end=simulation_end(mode,k0,mass,sk,rect_state,beat_kind),mode=mode,k0=k0,mass=mass,sk=sk,harmonic_state=harmonic_state,well_state=well_state,rect_state=rect_state,beat_kind=beat_kind)
 
 
 # Keep the clock and reset in one synchronous browser callback. A delayed network
@@ -781,6 +790,12 @@ app.clientside_callback(
     Input('ho-state','data'),Input('play','n_clicks'),Input('time-limit','data'),State('time','value'),State('speed','value'),State('clock','disabled'),State('render-busy','data'))
 
 
+@app.callback(Output('sigma-k-label','children'),Output('sigma-k-hint','children'),Input('mode','value'))
+def configure_width_label(mode):
+    if mode=='beat':return '두 파수의 차이 Δk · 단위 1/L₀','k₂=k₁+Δk. 작게 설정할수록 두 파동이 비슷해지고 포락선 간격이 넓어집니다. 가우스 파수 폭 σₖ와 다릅니다.'
+    return '파수 폭 σₖ','파수들이 중심 파수 주변에 퍼져 있는 정도입니다. 가우스 기준으로 폭이 클수록 다양한 파장이 포함되고 초기 파동묶음은 좁아집니다.'
+
+
 @app.callback(Output('count','value'),Output('sigma-k','value'),Input('few','n_clicks'),Input('packet','n_clicks'),Input('narrow','n_clicks'),prevent_initial_call=True)
 def set_preset(_few,_packet,_narrow):
     return {'few':(7,.7),'packet':(61,.7),'narrow':(81,1.4)}[ctx.triggered_id]
@@ -794,13 +809,17 @@ def configure_vector_intro(mode,fourier_state):
 
 @app.callback(Output('experiment-content','className'),Input('mode','value'),Input('ft-state','data'))
 def configure_plot_order(mode,fourier_state):
+    if mode=='dispersion':return 'content dispersion-content'
+    if mode=='beat':return 'content beat-content'
     if mode=='rect':return 'content rectangular-content'
     return 'content reconstruction-content' if mode=='fourier' and (fourier_state or ft.DEFAULT_STATE)['stage']=='reconstruct' else 'content'
 
 
 @app.callback(Output('graph-equations','children'),Output('graph-equations','style'),
-              Input('mode','value'),Input('count','value'),Input('sigma-k','value'),Input('ft-state','data'),Input('rect-state','data'))
-def render_graph_equations(mode,count,sigma_k,fourier_state=None,rect_state=None):
+              Input('mode','value'),Input('count','value'),Input('sigma-k','value'),Input('ft-state','data'),Input('rect-state','data'),Input('beat-kind','value'))
+def render_graph_equations(mode,count,sigma_k,fourier_state=None,rect_state=None,beat_kind='linear'):
+    if mode=='dispersion':return dispersion.equations(),{}
+    if mode=='beat':return beat.equations(beat_kind),{}
     if mode=='rect':return rect.equations(rect_state),{}
     if mode=='plane':
         return [math_block(r'\Psi(x,t)=A e^{i(kx-\omega t)}'),dcc.Markdown(r'$\omega=\frac{\hbar k^2}{2m}$. 그래프는 이 파동함수의 실수부·허수부·절댓값 제곱과 위상 색을 표시합니다.',mathjax=True,className='equation-note')],{}
@@ -835,15 +854,18 @@ def render_graph_equations(mode,count,sigma_k,fourier_state=None,rect_state=None
 @app.callback(Output('k0-label','children'),Output('k0-hint','children'),Output('mass-hint','children'),Input('mode','value'))
 def configure_wavenumber_label(mode):
     if mode=='rect':return '중심 파수 k₀','','질량 단위 M₀ · 같은 a·k₀·시간에서 질량이 크면 중심 이동과 회절 퍼짐이 느립니다.'
+    if mode=='dispersion':return '중심 파수 k₀ · 단위 1/L₀','공통 초기 파수 분포의 중심 · 무분산 속도를 물질파의 중심 속도에 자동으로 맞춥니다.','아래 물질파의 질량입니다. 두 중심을 함께 이동시키기 위해 위쪽 무분산 속도도 자동으로 맞춥니다.'
+    if mode=='beat':return '첫 번째 파수 k₁ · 단위 1/L₀','두 번째 파수는 k₂=k₁+Δk입니다.','같은 두 파수에서 질량이 클수록 두 속도가 모두 느려집니다.'
     if mode=='plane':
         return '파수 k · 단위 1/L₀','하나의 평면파에 해당하는 파수 · 운동량 p=ℏk','질량 단위 M₀ · 같은 파수 k에서 질량이 크면 위상속도가 느립니다.'
     return '중심 파수 k₀ · 단위 1/L₀','초기 중심 운동량 p₀=ℏk₀','질량 단위 M₀ · 같은 k₀·σₖ·시간에서 질량이 크면 이동과 퍼짐이 느립니다.'
 
 
 @app.callback(Output('options','options'),Output('options','value'),Output('play','disabled'),Output('time-box','style'),Output('presets','style'),
-              Output('sigma-k-box','style'),Output('count-box','style'),Output('mass-box','style'),Output('pulse-width-box','style'),Output('ho-controls','style'),Output('k0-box','style'),Output('ft-controls','style'),Output('playback-controls','style'),Output('speed-control','style'),Input('mode','value'),Input('rect-kind','value'))
-def configure(mode,rect_kind='real'):
+              Output('sigma-k-box','style'),Output('count-box','style'),Output('mass-box','style'),Output('pulse-width-box','style'),Output('ho-controls','style'),Output('k0-box','style'),Output('ft-controls','style'),Output('playback-controls','style'),Output('speed-control','style'),Input('mode','value'),Input('rect-kind','value'),Input('beat-kind','value'))
+def configure(mode,rect_kind='real',beat_kind='linear'):
     labels={'real':'Re[Ψ]','imag':'Im[Ψ]','density':'|Ψ|²','components':'입사·반사 부분 함께 보기','envelope':'진폭 포락선','follow':'평균 위치 따라가기','reference':'t=0 기준 / 연속 목표'}
+    if mode=='dispersion':labels.update(real='실수부',density='진폭의 절댓값 제곱',envelope='진폭 포락선',reference='초기 폭 유지 · 중심 이동 기준')
     if mode=='build':
         labels.update(real='N개 합 · Re[Ψ]',imag='N개 합 · Im[Ψ]',density='N개 합 · |Ψ|²',reference='모든 k · 가우스 밀도 비교',envelope='모든 k · 가우스 포락선')
     if mode=='plane':
@@ -858,15 +880,20 @@ def configure(mode,rect_kind='real'):
     if mode=='mirror':
         labels={'real':'합성 전기장 E','imag':'자기장 ZH','density':'에너지 밀도 u/2','components':'전체 입사파와 반사파','envelope':'입사·반사 포락선','directions':'파수의 진행 방향 표시'}
         labels.update({f'k{i+1}':html.Span(f'대표 파수 성분 {i+1}',style={'color':color}) for i,color in enumerate(COMPONENT_COLORS)})
-    allowed={'rect':['real','imag','density','phase','reference'],'plane':['real','imag','density','phase'],'build':['real','imag','density','envelope','reference'],'free':['real','imag','density','envelope','follow','reference'],'wall':['real','imag','density','phase','components'],'mirror':list(labels),'oscillator':['real','imag','density','phase','potential','reference'],'fourier':[],'well':['real','imag','density','phase','reference']}[mode]
-    defaults={'rect':['density','reference'],'plane':['real','density','phase'],'build':['real','density','reference'],'free':['real','density'],'wall':['density','phase'],'mirror':['real','directions'],'oscillator':['density','phase','potential'],'fourier':[],'well':['density','phase']}[mode]
+    allowed={'dispersion':['real','density','envelope','reference'],'beat':['envelope'],'rect':['real','imag','density','phase','reference'],'plane':['real','imag','density','phase'],'build':['real','imag','density','envelope','reference'],'free':['real','imag','density','envelope','follow','reference'],'wall':['real','imag','density','phase','components'],'mirror':list(labels),'oscillator':['real','imag','density','phase','potential','reference'],'fourier':[],'well':['real','imag','density','phase','reference']}[mode]
+    defaults={'dispersion':['real','density','envelope','reference'],'beat':['envelope'],'rect':['density','reference'],'plane':['real','density','phase'],'build':['real','density','reference'],'free':['real','density'],'wall':['density','phase'],'mirror':['real','directions'],'oscillator':['density','phase','potential'],'fourier':[],'well':['density','phase']}[mode]
     if mode=='rect':defaults=['real','imag','density'] if rect_kind=='boost' else ['real','density','reference']
     hide={'display':'none'};show={}
     return ([{'label':labels[k],'value':k} for k in allowed],defaults,mode in ('build','fourier'),hide if mode in ('build','fourier') else show,
-            show if mode=='build' else hide,show if mode in ('build','free','wall') else hide,show if mode=='build' else hide,
-            show if mode in ('plane','free','wall','rect') else hide,show if mode=='mirror' else hide,
+            show if mode=='build' else hide,show if mode in ('build','free','wall','beat','dispersion') else hide,show if mode=='build' else hide,
+            show if mode in ('plane','free','wall','rect','dispersion') or (mode=='beat' and beat_kind=='matter') else hide,show if mode=='mirror' else hide,
             show if mode=='oscillator' else hide,hide if mode in ('oscillator','fourier','well','rect') else show,
             show if mode=='fourier' else hide,hide if mode=='fourier' else show,hide if mode=='fourier' else show)
+
+
+@app.callback(Output('beat-controls','style'),Input('mode','value'))
+def configure_beat_controls(mode):
+    return {} if mode=='beat' else {'display':'none'}
 
 
 @app.callback(Output('rect-controls','style'),Input('mode','value'))
@@ -962,11 +989,11 @@ def playback_position_patch(figure,move_grid=False):
 
 PARAMS=[Input('mode','value'),Input('k0','value'),Input('sigma-k','value'),Input('count','value'),Input('mass','value'),Input('pulse-width','value'),Input('time','value'),Input('options','value'),Input('ho-state','data')]
 @app.callback(Output('position','figure'),Output('spectrum','figure'),Output('metrics','children'),Output('concept','children'),Output('questions','children'),Output('status','children'),Output('position-note','children'),Output('spectrum-note','children'),Output('position-title','children'),Output('spectrum-title','children'),Output('lesson-title','children'),Output('lesson-desc','children'),Output('unit-label','children'),
-              Output('k0-value','children'),Output('sigma-k-value','children'),Output('count-value','children'),Output('mass-value','children'),Output('pulse-width-value','children'),Output('time-value','children'),*[Input('server-time','data') if p.component_id=='time' else p for p in PARAMS],Input('axis-mode','value'),Input('y-zoom','value'),Input('ft-state','data'),Input('well-state','data'),Input('rect-state','data'),State('time','value'),running=[(Output('render-busy','data'),True,False)])
-def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,fourier_state=None,well_state=None,rect_state=None,actual_time=None):
+              Output('k0-value','children'),Output('sigma-k-value','children'),Output('count-value','children'),Output('mass-value','children'),Output('pulse-width-value','children'),Output('time-value','children'),*[Input('server-time','data') if p.component_id=='time' else p for p in PARAMS],Input('axis-mode','value'),Input('y-zoom','value'),Input('ft-state','data'),Input('well-state','data'),Input('rect-state','data'),Input('beat-kind','value'),State('time','value'),running=[(Output('render-busy','data'),True,False)])
+def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,fourier_state=None,well_state=None,rect_state=None,beat_kind='linear',actual_time=None):
     if mode in playback.LOCAL_MODES and actual_time is not None:t=actual_time
     changed={prop.split('.')[0] for prop in ctx.triggered_prop_ids}
-    if changed & {'mode','k0','sigma-k','mass','ho-state','well-state','rect-state'}:
+    if changed & {'mode','k0','sigma-k','mass','ho-state','well-state','rect-state','beat-kind'}:
         t=0  # Render new initial conditions at t=0 even while the time reset is pending.
     if mode=='oscillator' and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         try:
@@ -980,13 +1007,15 @@ def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,four
     if mode=='mirror' and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         return (mirror_position_patch(k0,sigma,t,opts,axis_mode,zoom),)+(no_update,)*17+(f'{t:.2f}',)
     t=0 if mode=='build' else t
-    result=figures(mode,k0,sk,count,mass,sigma,t,opts,axis_mode,zoom,harmonic_state,fourier_state,well_state,rect_state)
+    result=figures(mode,k0,sk,count,mass,sigma,t,opts,axis_mode,zoom,harmonic_state,fourier_state,well_state,rect_state,beat_kind)
     limit_phase_markers(result[0])
     if mode in ('plane','free','well') and set(ctx.triggered_prop_ids)=={'server-time.data'}:
         position=playback_position_patch(result[0],move_grid=mode=='free' and 'follow' in (opts or []))
         return (position,no_update,result[2])+(no_update,)*15+(f'{t:.2f}',)
     info=MODE_INFO[mode]
     unit='전자기파 · c=1, E₀=1 · x₀=−18' if mode=='mirror' else '양자 모형 · 무차원 단위 · ℏ=1 · x₀=0'
+    if mode=='dispersion':unit='파동과 분산 · 같은 초기 분포 · 같은 중심 속도 · ℏ=1'
+    if mode=='beat':unit='무분산 파동 · c=V₀' if beat_kind=='linear' else '자유입자 물질파 · ℏ=1 · 속도 v₀=ℏ/(M₀L₀)'
     if mode=='plane':unit='평면파 · 길이 단위 L₀ · 질량 단위 M₀ · 시간 단위 T₀ · ℏ=1'
     if mode=='well':unit='무한우물 단위 · 길이 L · 에너지 E₁=π²ℏ²/(2mL²) · 시간 ℏ/E₁'
     if mode=='fourier':unit='함수 전개 · 1~3단계 구간 0≤x≤L · 4단계 전체 실수축 · ℏ=1'
@@ -995,6 +1024,8 @@ def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,four
     if mode=='rect':unit='사각 파동묶음 · 길이 L₀ · 시간 T₀=M₀L₀²/ℏ · ℏ=1'
     if mode=='wall':unit='양자 모형 · 무차원 단위 · ℏ=1 · 초기 중심 x₀=−18 · 무한 퍼텐셜 벽 x=0'
     spectrum_title={'orthogonal':'두 기저함수의 곱 · 양과 음의 상쇄','project':'목표 함수와 기저의 곱 · 계수 추출','reconstruct':'추출 계수 먼저 보기 · |cₙ| 크기순','continuous':'파수 공간의 확률밀도 |A(k)|²'}[(fourier_state or ft.DEFAULT_STATE)['stage']] if mode=='fourier' else '에너지 고유상태의 성분 확률' if mode in ('oscillator','well') else '파수 공간'
+    if mode=='dispersion':spectrum_title='두 모형의 공통 파수 분포 · 시간에 무관'
+    if mode=='beat':spectrum_title='분산관계 · 두 파수에서 포락선 속도 찾기'
     if mode=='rect':spectrum_title='사각 초기 상태 · 푸리에 진폭과 확률밀도'
     outputs=list((*result[:9],spectrum_title,info[1],info[2],unit,
             f'{k0:.2f}',f'{sk:.2f}',str(count),f'{mass:.2f}',f'{sigma:.2f}',f'{t:.2f}'))
@@ -1004,13 +1035,13 @@ def render(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,axis_mode,zoom,four
 
 
 
-@app.callback(Output('browser-model','data'),Input('mode','value'),Input('k0','value'),Input('mass','value'),Input('sigma-k','value'),Input('options','value'),Input('axis-mode','value'),Input('y-zoom','value'),Input('ho-state','data'),Input('well-state','data'),Input('rect-state','data'))
-def configure_browser_model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state=None):
-    return playback.model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state)
+@app.callback(Output('browser-model','data'),Input('mode','value'),Input('k0','value'),Input('mass','value'),Input('sigma-k','value'),Input('options','value'),Input('axis-mode','value'),Input('y-zoom','value'),Input('ho-state','data'),Input('well-state','data'),Input('rect-state','data'),Input('beat-kind','value'))
+def configure_browser_model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state=None,beat_kind='linear'):
+    return playback.model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state,beat_kind)
 
 
 app.clientside_callback(
-    "function(t,mode){return ['plane','free','rect','well','oscillator','build','fourier'].includes(mode)?dash_clientside.no_update:t;}",
+    "function(t,mode){return ['plane','beat','dispersion','free','rect','well','oscillator','build','fourier'].includes(mode)?dash_clientside.no_update:t;}",
     Output('server-time','data'),Input('time','value'),Input('mode','value'))
 
 app.clientside_callback(
@@ -1019,15 +1050,16 @@ app.clientside_callback(
     Input('time','value'),Input('browser-model','data'),State('position','figure'),State('mode','value'),prevent_initial_call=True)
 
 
-@app.callback(Output('download','data'),Input('export','n_clicks'),*[State(p.component_id,p.component_property) for p in PARAMS],State('ft-state','data'),State('well-state','data'),State('rect-state','data'),prevent_initial_call=True)
-def export_data(_n,mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,fourier_state=None,well_state=None,rect_state=None):
+@app.callback(Output('download','data'),Input('export','n_clicks'),*[State(p.component_id,p.component_property) for p in PARAMS],State('ft-state','data'),State('well-state','data'),State('rect-state','data'),State('beat-kind','value'),prevent_initial_call=True)
+def export_data(_n,mode,k0,sk,count,mass,sigma,t,opts,harmonic_state,fourier_state=None,well_state=None,rect_state=None,beat_kind='linear'):
     t=0 if mode=='build' else t
-    data=figures(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state=harmonic_state,fourier_state=fourier_state,well_state=well_state,rect_state=rect_state)[-1]
+    data=figures(mode,k0,sk,count,mass,sigma,t,opts,harmonic_state=harmonic_state,fourier_state=fourier_state,well_state=well_state,rect_state=rect_state,beat_kind=beat_kind)[-1]
     names=list(data)
     header=f'# mode={mode},t={t},k0={k0},sigma_k={sk},N={count},m={mass},pulse_sigma={sigma}\n'
     if mode=='oscillator':header=f'# mode=oscillator,t={t},hbar=m=omega=1\n# weights={harmonic_state["weights"]}\n# phase_degrees={harmonic_state["phases"]}\n'
     if mode=='well':header=f'# mode=well,time_E1_over_hbar={t}, settings={well_state}\n'
     if mode=='fourier':header=f'# mode=fourier, settings={fourier_state}\n'
+    if mode=='beat':header=f'# mode=beat,dispersion={beat_kind},t={t},k1={k0},dk={sk},mass={mass},c=1 (linear only)\n'
     if mode=='rect':header=f'# mode=rect,t={t},mass={mass},settings={rect_state},A0=1/sqrt(2a)\n'
     rows=[','.join(names)]
     rows+= [','.join(f'{float(v):.10g}' for v in row) for row in zip(*(data[key] for key in names))]

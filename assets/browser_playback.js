@@ -76,9 +76,64 @@
         return {x,re,im,density:re.map((r,i)=>r*r+im[i]*im[i]),phase:re.map((r,i)=>Math.atan2(im[i],r)),mean,sd,sdP,norm,offset};
     }
     function metric(label,value) {return {namespace:'dash_html_components',type:'Div',props:{className:'metric',children:[{namespace:'dash_html_components',type:'Small',props:{children:label}},{namespace:'dash_html_components',type:'Strong',props:{children:value}}]}};}
+    function dispersionFrame(m,t) {
+        const sx=1/(2*m.sk),x=m.x;
+        const matter=frame(Object.assign({},m,{mode:'free'}),t);
+        const re=[],im=[],density=[];
+        for(const v of x) {
+            const d=v-m.k*t/m.mass,a=Math.exp(-d*d/(4*sx*sx)),p=m.k*d;
+            re.push(a*Math.cos(p));im.push(a*Math.sin(p));density.push(a*a);
+        }
+        return [{x,re,im,density,mean:m.k*t/m.mass,sd:sx},matter];
+    }
     function render(t,m,base,mode) {
         const no=window.dash_clientside.no_update;
         if(!m || m.mode!==mode || !base || !base.data || !base.data.length)return [no,no,no];
+        if(mode==='dispersion') {
+            if(base.layout.uirevision!=='dispersion')return [no,no,no];
+            const frames=dispersionFrame(m,Number(t||0)),sx=1/(2*m.sk),x=m.x;
+            const data=base.data.map(tr=>{
+                const meta=tr.meta||{},f=frames[meta.row-1];if(!f)return tr;
+                let y;
+                if(meta.field==='real')y=f.re;
+                else if(meta.field==='density')y=f.density;
+                else if(meta.field==='reference')y=x.map(v=>Math.exp(-((v-f.mean)**2)/(2*sx*sx)));
+                else y=f.density.map(v=>Math.sqrt(v)*(meta.field==='neg-env'?-1:1));
+                return Object.assign({},tr,{x,y});
+            });
+            const layout=JSON.parse(JSON.stringify(base.layout));
+            frames.forEach((f,i)=>{
+                const center=(layout.shapes||[])[2*i],band=(layout.shapes||[])[2*i+1];
+                if(center)center.x0=center.x1=f.mean;
+                if(band){band.x0=f.mean-f.sd;band.x1=f.mean+f.sd;}
+                const a=(layout.annotations||[])[2+i];
+                if(a){a.x=f.mean;a.text='폭 σ<sub>x</sub> = '+f.sd.toFixed(3)+' L₀ · 초기의 '+(f.sd/sx).toFixed(2)+'배';}
+            });
+            const metrics=[metric('무분산 · 폭 / 초기 폭','1.000'),metric('물질파 · 폭 / 초기 폭',(frames[1].sd/sx).toFixed(3)),metric('무분산 · 중심 속도',(m.k/m.mass).toFixed(3)+' V₀'),metric('물질파 · 중심 속도',(m.k/m.mass).toFixed(3)+' V₀')];
+            return [{data,layout},metrics,Number(t||0).toFixed(2)];
+        }
+        if(mode==='beat') {
+            if(base.layout.uirevision!=='beat')return [no,no,no];
+            const k=m.k,dk=m.sk,k2=k+dk,w1=m.kind==='linear'?k:k*k/(2*m.mass),w2=m.kind==='linear'?k2:k2*k2/(2*m.mass);
+            const vg=(w2-w1)/dk,vp=(w1+w2)/(k+k2),x=m.x;
+            const ys=[x.map(v=>Math.cos(k*v-w1*t)),x.map(v=>Math.cos(k2*v-w2*t))];
+            ys.push(ys[0].map((v,i)=>v+ys[1][i]));
+            const env=x.map(v=>2*Math.abs(Math.cos((dk*v-(w2-w1)*t)/2)));
+            if(m.options.includes('envelope'))ys.push(env,env.map(v=>-v));
+            const speeds=[vg,vp,w1/k,w2/k2];
+            const data=base.data.map((tr,i)=>{
+                if(tr.name==='마루 추적 1' || tr.name==='마루 추적 2') {
+                    const speed=tr.name==='마루 추적 1'?speeds[2]:speeds[3];
+                    return Object.assign({},tr,{x:[speed*t],y:[1]});
+                }
+                return Object.assign({},tr,{x,y:ys[i]});
+            });
+            const layout=JSON.parse(JSON.stringify(base.layout));
+            (layout.shapes||[]).forEach((v,i)=>v.x0=v.x1=speeds[i]*t);
+            const a=layout.annotations||[];
+            for(let i=0;i<4;i++)if(a[i+2])a[i+2].x=speeds[i]*t;
+            return [{data,layout},no,Number(t||0).toFixed(2)];
+        }
         const expected={plane:'plane',free:'free',well:'well',oscillator:'oscillator',rect:'rect'}[mode];
         if(base.layout.uirevision!==expected)return [no,no,no];
         const f=frame(m,Number(t||0)), layout=JSON.parse(JSON.stringify(base.layout));
@@ -136,6 +191,6 @@
         if(mode==='oscillator')metrics=[metric('평균 위치 ⟨x⟩',f.mean.toFixed(3)),metric('위치 표준편차 Δx',f.sd.toFixed(3)),metric('현재 Δx·Δp / ℏ',(f.sd*f.sdP).toFixed(5)),metric('평균 에너지 / ℏω',m.energy.toFixed(3))];
         return [{data,layout},metrics,Number(t||0).toFixed(2)];
     }
-    window.quantumPlayback={frame,render,fresnel};
+    window.quantumPlayback={frame,render,fresnel,dispersionFrame};
     window.dash_clientside=Object.assign({},window.dash_clientside,{quantum:{render}});
 })();

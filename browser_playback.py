@@ -4,10 +4,16 @@ import harmonic_ui as ho
 import well_ui as well
 from physics import sine_basis
 
-LOCAL_MODES=('plane','free','well','oscillator','rect')
+LOCAL_MODES=('dispersion','beat','plane','free','well','oscillator','rect')
 
 
-def model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state=None):
+def model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state=None,beat_kind='linear'):
+    if mode=='dispersion':
+        import dispersion_ui as dispersion
+        return dispersion.model(k,sk,mass,options,axis,zoom)
+    if mode=='beat':
+        import beat_ui as beat
+        return dict(mode='beat',kind=beat_kind,k=k,sk=sk,mass=mass,x=beat.X.tolist(),options=options or [],zoom=zoom)
     if mode=='rect':
         import rectangular_ui as rect
         return rect.model(rect_state or rect.DEFAULT_STATE,mass,options,axis,zoom)

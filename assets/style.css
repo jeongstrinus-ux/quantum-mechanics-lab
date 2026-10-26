@@ -117,3 +117,7 @@ main{grid-template-columns:340px minmax(0,1fr)}
   main>.controls::-webkit-scrollbar-track{background:#071524;border-radius:8px}
   main>.controls::-webkit-scrollbar-thumb{background:#496078;border:2px solid #071524;border-radius:8px}
 }
+
+.beat-content .position-graph{height:700px!important;min-height:700px}
+
+.dispersion-content .position-graph{height:740px!important;min-height:740px}
