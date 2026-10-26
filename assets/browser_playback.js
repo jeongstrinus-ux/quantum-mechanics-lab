@@ -28,14 +28,15 @@
         if (m.mode==='plane') {
             for(const v of x) {const p=m.k*v-m.k*m.k*t/(2*m.mass);re.push(Math.cos(p));im.push(Math.sin(p));}
         } else if(m.mode==='free') {
-            const sx=1/(2*m.sk), b=t/(2*m.mass*sx*sx);
+            const sx=1/(2*m.sk), b=t/(2*m.mass*sx*sx),den=1+b*b;
+            const amplitude=Math.pow(den,-.25),spatial=1/(4*sx*sx*den),phaseOffset=-.5*Math.atan(b)-m.k*m.k*t/(2*m.mass);
             mean=m.k*t/m.mass;sd=sx*Math.sqrt(1+b*b);sdP=m.sk;
             if(m.options.includes('follow')) {
                 const span=Math.max(15,6*sd);x=Array.from({length:1801},(_,i)=>mean-span+2*span*i/1800);
             }
             for(const v of x) {
-                const d=v-mean, a=Math.pow(1+b*b,-.25)*Math.exp(-d*d/(4*sx*sx*(1+b*b)));
-                const p=-.5*Math.atan(b)+d*d*b/(4*sx*sx*(1+b*b))+m.k*v-m.k*m.k*t/(2*m.mass);
+                const d=v-mean, a=amplitude*Math.exp(-d*d*spatial);
+                const p=phaseOffset+d*d*b*spatial+m.k*v;
                 re.push(a*Math.cos(p));im.push(a*Math.sin(p));
             }
         } else if(m.mode==='rect') {
@@ -54,7 +55,8 @@
         } else {
             const cr=m.cr.map((v,n)=>v*Math.cos(m.energies[n]*t)+m.ci[n]*Math.sin(m.energies[n]*t));
             const ci=m.ci.map((v,n)=>v*Math.cos(m.energies[n]*t)-m.cr[n]*Math.sin(m.energies[n]*t));
-            for(let j=0;j<x.length;j++) {let r=0,i=0;for(let n=0;n<cr.length;n++){r+=cr[n]*m.basis[n][j];i+=ci[n]*m.basis[n][j];}re.push(r/amp);im.push(i/amp);}
+            const active=cr.map((v,n)=>n).filter(n=>cr[n]!==0 || ci[n]!==0);
+            for(let j=0;j<x.length;j++) {let r=0,i=0;for(const n of active){r+=cr[n]*m.basis[n][j];i+=ci[n]*m.basis[n][j];}re.push(r/amp);im.push(i/amp);}
             if(m.mode==='oscillator') {
                 let number=0, ar=0, ai=0, a2r=0;
                 for(let n=0;n<cr.length;n++) {
@@ -73,7 +75,7 @@
                 sd=Math.sqrt(Math.max(0,second-mean*mean));
             }
         }
-        return {x,re,im,density:re.map((r,i)=>r*r+im[i]*im[i]),phase:re.map((r,i)=>Math.atan2(im[i],r)),mean,sd,sdP,norm,offset};
+        return {x,re,im,density:re.map((r,i)=>r*r+im[i]*im[i]),phase:m.options.includes('phase')?re.map((r,i)=>Math.atan2(im[i],r)):[],mean,sd,sdP,norm,offset};
     }
     function metric(label,value) {return {namespace:'dash_html_components',type:'Div',props:{className:'metric',children:[{namespace:'dash_html_components',type:'Small',props:{children:label}},{namespace:'dash_html_components',type:'Strong',props:{children:value}}]}};}
     function dispersionFrame(m,t) {

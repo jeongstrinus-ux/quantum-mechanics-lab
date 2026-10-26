@@ -665,7 +665,7 @@ app.layout=html.Div([
         html.Section([html.Div([html.Button('현재 데이터 CSV 저장',id='export'),html.Span('그래프 우상단 카메라 아이콘: PNG 저장',className='mini')],className='toolbar'),
             html.Div([html.Div([html.Label('위치 그래프 y축 보기'),dcc.RadioItems(id='axis-mode',options=[{'label':'현재 파형에 맞춤','value':'auto'},{'label':'초기 기준 유지','value':'fixed'}],value='fixed',inline=True,className='speed-choice')]),
                       html.Div([html.Label('y축 확대'),dcc.Slider(id='y-zoom',min=.5,max=4,step=.25,value=1,marks={.5:'0.5배',1:'1배',2:'2배',4:'4배'})])],className='axis-controls'),
-            ft.vector_intro(),
+            html.Div(id='vector-intro-slot',children=[]),
             html.Article([html.H3(id='position-title'),html.Div(id='graph-equations',style={'display':'none'}),dcc.Graph(id='position',responsive=True,className='position-graph',config={'displaylogo':False,'modeBarButtonsToRemove':['select2d','lasso2d'],'toImageButtonOptions':{'format':'png','filename':'wave-position','scale':2}}),html.P(id='position-note',className='plotnote')],className='plot',id='position-panel'),
             html.Article([html.H3(id='spectrum-title'),dcc.Graph(id='spectrum',responsive=True,className='spectrum-graph',config={'displaylogo':False,'modeBarButtonsToRemove':['select2d','lasso2d'],'toImageButtonOptions':{'format':'png','filename':'wave-spectrum','scale':2}}),html.P(id='spectrum-note',className='plotnote')],className='plot',id='spectrum-panel'),
             html.Article([html.H3(id='component-title'),dcc.Graph(id='component-plot',responsive=True,className='component-graph',config={'displaylogo':False,'modeBarButtonsToRemove':['select2d','lasso2d'],'toImageButtonOptions':{'format':'png','filename':'wave-components','scale':2}}),html.P(id='component-note',className='plotnote')],id='component-panel',className='plot',style={'display':'none'}),
@@ -779,7 +779,8 @@ app.clientside_callback(
         }
         if (!disabled && valid && changed.has('clock')) {
             // Wait for the previous server frame instead of building a queue.
-            if (busy) return Array(4).fill(dash_clientside.no_update);
+            if (busy || (typeof document !== 'undefined' && document.hidden))
+                return Array(4).fill(dash_clientside.no_update);
             const next = Math.min(end, Number(t || 0)+(mode === 'well' ? .01 : .08)*Number(speed || 1));
             return [next, end, next>=end, label(next>=end)];
         }
@@ -802,9 +803,11 @@ def set_preset(_few,_packet,_narrow):
 
 
 
-@app.callback(Output('vector-intro-panel','style'),Input('mode','value'),Input('ft-state','data'))
-def configure_vector_intro(mode,fourier_state):
-    return {} if mode=='fourier' and (fourier_state or ft.DEFAULT_STATE)['stage']=='orthogonal' else {'display':'none'}
+@app.callback(Output('vector-intro-slot','children'),Input('mode','value'),Input('ft-stage','value'),State('vector-intro-slot','children'))
+def configure_vector_intro(mode,stage,children=None):
+    # Mount WebGL only for the visible lesson; removing children releases it.
+    if mode!='fourier' or stage!='orthogonal':return [] if children else no_update
+    return no_update if children else ft.vector_intro()
 
 
 @app.callback(Output('experiment-content','className'),Input('mode','value'),Input('ft-state','data'))

@@ -3,7 +3,7 @@ from functools import lru_cache
 import numpy as np
 import plotly.graph_objects as go
 from dash import html,dcc
-from physics import sine_basis,sine_projection,gaussian_packet,gaussian_fourier_amplitude
+from physics import sine_basis,gaussian_packet,gaussian_fourier_amplitude
 from teaching_content import question_items,math_block
 
 DEFAULT_STATE=dict(stage='orthogonal',length=10.,m=2,n=1,count=1,shape='gaussian',width=.1,sigma_x=1.,x0=0.,k0=0.)
@@ -34,9 +34,15 @@ def cumulative_integral(x,y):
     return np.concatenate([[0.],np.cumsum((y[1:]+y[:-1])*.5*np.diff(x))])
 
 
-@lru_cache(maxsize=24)
+@lru_cache(maxsize=4)
+def discrete_basis(length):
+    x=np.linspace(0,length,4097)
+    return x,sine_basis(x,np.arange(1,61),length)
+
+
+@lru_cache(maxsize=8)
 def discrete_data(length,shape,width):
-    x=np.linspace(0,length,4097);z=x/length
+    x,basis=discrete_basis(length);z=x/length
     if shape in ('gaussian','offcenter'):
         center=.5 if shape=='gaussian' else .3
         f=np.sin(np.pi*z)*np.exp(-(z-center)**2/(2*width**2))
@@ -48,7 +54,7 @@ def discrete_data(length,shape,width):
     elif shape=='rectangle':f=(np.abs(z-.5)<width).astype(float)
     else:raise ValueError('unknown target function')
     f/=np.sqrt(np.trapezoid(f*f,x))
-    coefficients,basis=sine_projection(x,f,60,length)
+    coefficients=np.trapezoid(basis*f,x,axis=1)
     return x,f,coefficients,basis
 
 
@@ -263,4 +269,4 @@ def vector_intro():
         dcc.Graph(id='vector-intro-graph',figure=fig,responsive=True,className='vector-intro-graph',config={'displaylogo':False,'modeBarButtonsToRemove':['select2d','lasso2d']}),
         math_block(r'\mathbf v=3\mathbf e_x+2\mathbf e_y+2\mathbf e_z',r'\mathbf e_x\cdot\mathbf v=3,\quad\mathbf e_y\cdot\mathbf v=2,\quad\mathbf e_z\cdot\mathbf v=2',r'\mathbf e_i\cdot\mathbf e_j=\delta_{ij}'),
         dcc.Markdown(r'**함수도 같은 방식입니다.** 벡터의 방향 성분을 내적으로 꺼내듯이, 함수에서는 기저함수와의 내적으로 계수를 꺼냅니다. $c_n=\langle\psi_n\mid f\rangle=\int_0^L\psi_n^*(x)f(x)\,dx$. 복소 함수에서는 기저의 복소켤레를 사용합니다.',mathjax=True)
-    ],id='vector-intro-panel',className='plot',style={'display':'none'})
+    ],id='vector-intro-panel',className='plot')

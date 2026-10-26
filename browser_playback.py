@@ -32,5 +32,5 @@ def model(mode,k,mass,sk,options,axis,zoom,harmonic,well_state,rect_state=None,b
         s=harmonic or ho.DEFAULT_STATE
         try:c,_,a,_=ho.initial_data(tuple(float(v or 0) for v in s['weights']),tuple(float(v or 0) for v in s['phases']))
         except (ValueError,TypeError,KeyError):return None
-        result.update(x=ho.X.tolist(),basis=ho.BASIS.tolist(),energies=(np.arange(13)+.5).tolist(),cr=c.real.tolist(),ci=c.imag.tolist(),amp=a,energy=float(np.abs(c)**2@(np.arange(13)+.5)))
+        result.update(x=ho.X.tolist(),basis=[row.tolist() if abs(c[n])>0 else [] for n,row in enumerate(ho.basis())],energies=(np.arange(13)+.5).tolist(),cr=c.real.tolist(),ci=c.imag.tolist(),amp=a,energy=float(np.abs(c)**2@(np.arange(13)+.5)))
     return result

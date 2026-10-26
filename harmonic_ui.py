@@ -9,7 +9,16 @@ from teaching_content import question_items,math_block
 
 MAX_N=12
 X=np.linspace(-8,8,2401)
-BASIS=oscillator_basis(X,MAX_N)
+@lru_cache(maxsize=1)
+def basis():
+    """Create oscillator eigenfunctions only when this experiment is opened."""
+    return oscillator_basis(X,MAX_N)
+
+
+def __getattr__(name):
+    if name=='BASIS':return basis()  # Compatibility for callers of the old array.
+    raise AttributeError(name)
+
 PHASE_COLORS=[[0,'#ff5555'],[1/6,'#ffe35a'],[2/6,'#61e580'],[.5,'#48d7ff'],[4/6,'#7676ff'],[5/6,'#f071d5'],[1,'#ff5555']]
 DEFAULT_STATE=dict(weights=[1.,1.]+[0.]*(MAX_N-1),phases=[0.]*(MAX_N+1))
 
@@ -52,9 +61,9 @@ def controls():
 @lru_cache(maxsize=32)
 def initial_data(weights,angles):
     c=oscillator_coefficients(weights,angles)
-    ref=c@BASIS
+    ref=c@basis()
     amp0=float(np.max(np.abs(ref)))
-    upper=np.max(np.abs(c)@np.abs(BASIS))/amp0
+    upper=np.max(np.abs(c)@np.abs(basis()))/amp0
     return c,ref,amp0,float(max(1.25,upper*1.1,upper**2*1.1))
 
 
@@ -101,7 +110,7 @@ def figures(state,t,options,axis_mode,zoom,styled_fig,line,metric,fit_axis):
         position.update_xaxes(range=[-8,8]);position.update_yaxes(range=[0,1.25])
         spectrum.update_xaxes(range=[0,13]);spectrum.update_yaxes(range=[0,1])
         return position,spectrum,[metric('초기 상태','입력 필요')],concepts,question_items('oscillator',0),str(error),'가중치를 하나 이상 양수로 입력하세요.','', '조화진동자 · 초기 상태를 준비하세요',dict(x=X,real=np.zeros_like(X),imag=np.zeros_like(X),density=np.zeros_like(X))
-    psi=(c*np.exp(-1j*(np.arange(MAX_N+1)+.5)*t))@BASIS
+    psi=(c*np.exp(-1j*(np.arange(MAX_N+1)+.5)*t))@basis()
     moments=oscillator_moments(t,c)
     energy=moments['energy']
     values=display_values(psi,ref,amp0,opts)
@@ -150,7 +159,7 @@ def time_patch(state,t,options,axis_mode,zoom,metric):
     weights=tuple(float(v) if v is not None else 0. for v in state['weights'])
     angles=tuple(float(v) if v is not None else 0. for v in state['phases'])
     c,ref,amp0,_=initial_data(weights,angles)
-    psi=(c*np.exp(-1j*(np.arange(MAX_N+1)+.5)*t))@BASIS
+    psi=(c*np.exp(-1j*(np.arange(MAX_N+1)+.5)*t))@basis()
     moments=oscillator_moments(t,c);opts=set(options or [])
     patch=Patch();energy=moments['energy']
     values=display_values(psi,ref,amp0,opts)
